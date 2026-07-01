@@ -1,7 +1,5 @@
 # Traffic Sign CV Final Project
 
-Notebook: `traffic_sign_cv_final_project.ipynb`
-
 ## Dataset
 
 Tải GTSDB - German Traffic Sign Detection Benchmark, sau đó giải nén theo cấu trúc:
@@ -27,4 +25,4 @@ pip install numpy pandas opencv-python scikit-image scikit-learn matplotlib tqdm
 
 ## Chạy notebook
 
-Mở `traffic_sign_cv_final_project.ipynb` trong Jupyter Notebook, JupyterLab hoặc VS Code, sau đó chạy lần lượt từ đầu đến cuối.
+Mở `traffic_sign_cv.ipynb` trong Jupyter Notebook, JupyterLab hoặc VS Code, sau đó chạy lần lượt từ đầu đến cuối.
