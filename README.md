@@ -15,8 +15,6 @@ data/
     └── ReadMe.txt
 ```
 
-Khi chạy notebook, nếu thiếu `data/FullIJCNN2013/gt.txt` hoặc ảnh `.ppm`, notebook sẽ dừng và in hướng dẫn đặt dataset đúng vị trí. Notebook không tạo dataset giả và không hard-code kết quả.
-
 ## Cài thư viện
 
 ```bash
