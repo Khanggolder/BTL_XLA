@@ -166,7 +166,7 @@ def show_missing_guide(missing: list[str]) -> None:
     st.title("Demo HOG + SVM cho GTSDB")
     st.warning("Chưa tìm thấy artifacts cần thiết.")
     st.write("Hãy chạy export trước, Streamlit app không train lại model khi mở demo.")
-    st.code("python export_artifacts.py --data-root data/FullIJCNN2013 --notebook traffic_sign_cv.ipynb\nstreamlit run streamlit_app.py", language="bash")
+    st.code("python export_artifacts.py --data-root data/FullIJCNN2013 --notebook traffic_sign_cv.ipynb\nstreamlit run app.py", language="bash")
     st.write("Thiếu file:")
     st.write(", ".join(missing))
 
@@ -312,6 +312,85 @@ def tab4_config_from_state() -> dict[str, Any]:
         st.session_state["tab4_preprocessing"],
     )
 
+
+
+def pick_presentation_row(metadata: pd.DataFrame, mode: str) -> pd.Series | None:
+    if metadata.empty:
+        return None
+    if mode == "Baseline sai, Optimized đúng":
+        candidates = metadata[(metadata["baseline_pred"] != metadata["true_label"]) & (metadata["optimized_pred"] == metadata["true_label"])]
+    elif mode == "Cả hai đúng":
+        candidates = metadata[(metadata["baseline_pred"] == metadata["true_label"]) & (metadata["optimized_pred"] == metadata["true_label"])]
+    elif mode == "Cả hai sai":
+        candidates = metadata[(metadata["baseline_pred"] != metadata["true_label"]) & (metadata["optimized_pred"] != metadata["true_label"])]
+    else:
+        candidates = metadata.sample(n=1, random_state=RANDOM_STATE)
+    if candidates.empty:
+        return metadata.iloc[0]
+    return candidates.iloc[0]
+
+
+def preset_note(preset_name: str, value: Any) -> str:
+    notes = {
+        ("pixels_per_cell", "4x4"): "Cell nhỏ hơn -> bắt chi tiết nhỏ tốt hơn nhưng vector dài hơn, dễ nhạy nhiễu.",
+        ("pixels_per_cell", "8x8"): "Cân bằng giữa chi tiết và độ ổn định.",
+        ("pixels_per_cell", "16x16"): "Cell lớn hơn -> vector ngắn hơn nhưng dễ mất ký hiệu nhỏ trong biển báo.",
+        ("orientations", 6): "Ít bin hướng hơn -> mô tả thô hơn.",
+        ("orientations", 9): "Mức thường dùng, cân bằng tốt.",
+        ("orientations", 12): "Nhiều bin hướng hơn -> phân biệt hướng mịn hơn nhưng vector dài hơn.",
+        ("image_size", "64x64"): "ROI nhỏ hơn -> ít cell/block hơn, có thể mất chi tiết ký hiệu.",
+        ("image_size", "96x96"): "Giữ chi tiết biển báo tốt hơn.",
+        ("image_size", "128x128"): "Chi tiết nhiều hơn nhưng vector dài và có thể thêm nhiễu.",
+    }
+    return notes.get((preset_name, value), "Cấu hình này thay đổi cách HOG chia ảnh và tạo vector đặc trưng.")
+
+
+def make_preset_config(base_config: dict[str, Any], preset_name: str, value: Any) -> dict[str, Any]:
+    config = normalize_config(base_config)
+    if preset_name == "pixels_per_cell":
+        size = tuple(int(x) for x in str(value).split("x"))
+        config["pixels_per_cell"] = size
+    elif preset_name == "orientations":
+        config["orientations"] = int(value)
+    elif preset_name == "image_size":
+        size = tuple(int(x) for x in str(value).split("x"))
+        config["image_size"] = size
+    return normalize_config(config)
+
+
+def svm_decision_scores(model: Any, image_rgb: np.ndarray, config: dict[str, Any]) -> tuple[pd.DataFrame, str]:
+    feature = extract_hog_feature(image_rgb, config).reshape(1, -1)
+    if hasattr(model, "decision_function"):
+        scores = model.decision_function(feature)
+    else:
+        scores = model.named_steps["model"].decision_function(model.named_steps["scaler"].transform(feature))
+    scores = np.asarray(scores).reshape(-1)
+    classes = getattr(model, "classes_", None)
+    if classes is None:
+        classes = model.named_steps["model"].classes_
+    classes = [str(cls) for cls in classes]
+    df = pd.DataFrame({"class": classes, "score": scores.astype(float)})
+    pred = str(df.loc[df["score"].idxmax(), "class"])
+    return df, pred
+
+
+def render_svm_score_chart(scores: pd.DataFrame, title: str, true_label: str) -> None:
+    plot_df = scores.copy()
+    pred = str(plot_df.loc[plot_df["score"].idxmax(), "class"])
+    colors = ["#22c55e" if cls == pred else "#94a3b8" for cls in plot_df["class"]]
+    fig, ax = plt.subplots(figsize=(5.8, 3.2))
+    ax.bar(plot_df["class"], plot_df["score"], color=colors)
+    ax.axhline(0, color="#64748b", linewidth=0.8)
+    ax.set_title(f"{title}: pred={pred}, true={true_label}")
+    ax.set_xlabel("Nhóm biển báo")
+    ax.set_ylabel("Decision score")
+    ax.tick_params(axis="x", rotation=20)
+    for idx, row in plot_df.iterrows():
+        ax.text(idx, float(row["score"]), f"{float(row['score']):.2f}", ha="center", va="bottom" if row["score"] >= 0 else "top", fontsize=8)
+    fig.tight_layout()
+    st.pyplot(fig, width="stretch")
+    plt.close(fig)
+
 PROHIBITORY = [0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 15, 16]
 DANGER = [11, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]
 MANDATORY = [33, 34, 35, 36, 37, 38, 39, 40]
@@ -419,8 +498,8 @@ for key, value in tab4_defaults.items():
 
 st.sidebar.title("HOG + SVM Demo")
 data_root = get_data_root(configs.get("data_root"))
-quick_demo = st.sidebar.toggle("Quick demo", value=True)
-st.sidebar.caption("Quick demo giữ mọi phần nặng sau nút bấm và chỉ xử lý ROI đang chọn.")
+quick_demo = st.sidebar.toggle("Demo nhanh", value=True)
+st.sidebar.caption("Khi bật, Tab 5 chỉ chọn sẵn vài điều kiện robustness để demo gọn hơn.")
 
 st.title("Phân loại nhóm biển báo GTSDB bằng HOG + SVM")
 st.caption("Demo tập trung vào giả thuyết: tối ưu cấu hình HOG giúp cải thiện Macro F1 so với baseline.")
@@ -433,7 +512,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
         "4. Thử tham số",
         "5. Robustness",
         "6. Lỗi sai",
-        "7. Slide mode",
+        "7. Case Study Pipeline",
     ]
 )
 
@@ -507,30 +586,54 @@ with tab1:
         "nếu đổi tham số thì `feature_dim` cập nhật ngay, còn `macro_f1` chỉ có sau khi chạy đánh giá."
     )
 
+    with st.expander("Gợi ý thuyết trình nhanh"):
+        st.markdown(
+            """
+            - Bài toán của nhóm là phân loại ROI biển báo giao thông thành 4 nhóm: prohibitory, danger, mandatory, other.
+            - Pipeline: ảnh gốc -> bounding box ROI -> preprocessing -> HOG descriptor -> StandardScaler -> Linear SVM.
+            - HOG mô tả hình dạng qua hướng cạnh, phù hợp với biển báo vì biển báo có viền, mũi tên, chữ số và ký hiệu rõ.
+            - Giả thuyết: cấu hình HOG optimized sẽ cho Macro F1 tốt hơn baseline vì giữ được nhiều chi tiết ký hiệu hơn.
+            - Tiêu chí đánh giá: accuracy, macro precision, macro recall, macro F1, confusion matrix và robustness.
+            """
+        )
+
 with tab2:
     st.subheader("Demo phân loại ROI")
     chosen = None
     left, right = st.columns([1, 1])
     with left:
         label_filter = st.selectbox("Filter true label", ["all"] + GROUP_ORDER)
-        prefer_fixed = st.checkbox('Chỉ hiện "baseline sai nhưng optimized đúng"', value=True)
+        presentation_filter = st.selectbox(
+            "Chọn ví dụ thuyết trình",
+            ["Baseline sai, Optimized đúng", "Cả hai đúng", "Cả hai sai", "Tất cả mẫu"],
+        )
         view_df = test_metadata.copy()
         if label_filter != "all":
             view_df = view_df[view_df["true_label"] == label_filter]
-        if prefer_fixed:
-            view_df = view_df[(view_df["baseline_pred"] != view_df["true_label"]) & (view_df["optimized_pred"] == view_df["true_label"])]
-        if view_df.empty:
-            st.info("Không có mẫu phù hợp với filter hiện tại.")
+        if presentation_filter == "Baseline sai, Optimized đúng":
+            filtered_df = view_df[(view_df["baseline_pred"] != view_df["true_label"]) & (view_df["optimized_pred"] == view_df["true_label"])]
+        elif presentation_filter == "Cả hai đúng":
+            filtered_df = view_df[(view_df["baseline_pred"] == view_df["true_label"]) & (view_df["optimized_pred"] == view_df["true_label"])]
+        elif presentation_filter == "Cả hai sai":
+            filtered_df = view_df[(view_df["baseline_pred"] != view_df["true_label"]) & (view_df["optimized_pred"] != view_df["true_label"])]
         else:
-            labels = [row_label(row) for _, row in view_df.iterrows()]
-            current_default = 0
-            if "selected_roi_id" in st.session_state:
-                ids = view_df["roi_id"].astype(int).tolist()
-                if int(st.session_state["selected_roi_id"]) in ids:
-                    current_default = ids.index(int(st.session_state["selected_roi_id"]))
-            choice = st.selectbox("Chọn ảnh test", labels, index=current_default)
-            chosen = view_df.iloc[labels.index(choice)]
-            st.session_state["selected_roi_id"] = int(chosen["roi_id"])
+            filtered_df = view_df
+        if filtered_df.empty:
+            st.warning("Không có mẫu phù hợp, tự động hiển thị tất cả mẫu.")
+            filtered_df = test_metadata.copy()
+            if label_filter != "all":
+                filtered_df = filtered_df[filtered_df["true_label"] == label_filter]
+            if filtered_df.empty:
+                filtered_df = test_metadata.copy()
+        labels = [row_label(row) for _, row in filtered_df.iterrows()]
+        current_default = 0
+        if "selected_roi_id" in st.session_state:
+            ids = filtered_df["roi_id"].astype(int).tolist()
+            if int(st.session_state["selected_roi_id"]) in ids:
+                current_default = ids.index(int(st.session_state["selected_roi_id"]))
+        choice = st.selectbox("Chọn ảnh test", labels, index=current_default)
+        chosen = filtered_df.iloc[labels.index(choice)]
+        st.session_state["selected_roi_id"] = int(chosen["roi_id"])
 
     with right:
         row = chosen
@@ -558,7 +661,7 @@ with tab2:
                     st.markdown('<div class="good-box">Đây là ví dụ optimized sửa được lỗi của baseline.</div>', unsafe_allow_html=True)
 
 with tab3:
-    st.subheader("Gi\u1ea3i th\u00edch tr\u1ef1c quan HOG th\u01b0\u1eddng vs HOG t\u1ed1i \u01b0u")
+    st.subheader("Giải thích trực quan HOG thường vs HOG tối ưu")
     row = selected_row(test_metadata)
     _, roi = load_roi_from_row(row, data_root) if row is not None else (None, None)
     if roi is None:
@@ -578,7 +681,11 @@ with tab3:
         cell_w, cell_h = baseline_config["pixels_per_cell"]
 
         base_pre, base_hog = compute_hog_visualization(roi, baseline_config)
-        _, opt_hog = compute_hog_visualization(roi, tab4_config)
+        if optimized_dim > 0:
+            tab4_pre, opt_hog = compute_hog_visualization(roi, tab4_config)
+        else:
+            tab4_pre = base_pre
+            opt_hog = np.zeros_like(base_hog)
         _, _, magnitude, orientation_deg = compute_gradients(base_pre)
         magnitude_display = magnitude / (float(magnitude.max()) + 1e-8)
         orientation_display = make_gradient_orientation_display(orientation_deg, magnitude)
@@ -599,6 +706,8 @@ with tab3:
             f"pixels_per_cell={tab4_config['pixels_per_cell']}, cells_per_block={tab4_config['cells_per_block']}, "
             f"preprocessing={tab4_config['preprocessing']}, feature_dim={optimized_dim}."
         )
+        if optimized_dim == 0:
+            st.warning("Cấu hình Tab 4 hiện không hợp lệ cho HOG: cell/block quá lớn so với image_size.")
         if optimized_orientation == baseline_orientation:
             orientation_note = f"Baseline và {optimized_label} dùng cùng số orientation bins; khác biệt chính nằm ở các tham số HOG khác như image_size/preprocessing."
         elif optimized_orientation < baseline_orientation:
@@ -618,13 +727,12 @@ with tab3:
 
         wheel_col, formula_col = st.columns([1, 1.1])
         with wheel_col:
-            st.pyplot(
-                make_orientation_bin_figure(
-                    baseline_bins=baseline_orientation,
-                    optimized_bins=optimized_orientation,
-                ),
-                width='stretch',
+            orientation_fig = make_orientation_bin_figure(
+                baseline_bins=baseline_orientation,
+                optimized_bins=optimized_orientation,
             )
+            st.pyplot(orientation_fig, width='stretch')
+            plt.close(orientation_fig)
         with formula_col:
             st.code(
                 """n_cells_x = image_width / pixels_per_cell_x
@@ -669,13 +777,55 @@ feature_dim = n_blocks_x * n_blocks_y * cells_per_block_x * cells_per_block_y * 
             unsafe_allow_html=True,
         )
 
+        st.markdown("**Vector HOG đầy đủ đưa vào SVM**")
+        baseline_vector = extract_hog_feature(roi, baseline_config)
+        tab4_vector = extract_hog_feature(roi, tab4_config) if optimized_dim > 0 else None
+        vector_rows = 2 if tab4_vector is not None else 1
+        vector_fig, vector_axes = plt.subplots(vector_rows, 1, figsize=(11, 2.7 * vector_rows), squeeze=False)
+        vector_items = [("Baseline", baseline_vector, "#4c78a8")]
+        if tab4_vector is not None:
+            vector_items.append((optimized_label, tab4_vector, "#59a14f"))
+        for ax, (name, vector, color) in zip(vector_axes.ravel(), vector_items):
+            x = np.arange(vector.size)
+            ax.plot(x, vector, color=color, linewidth=0.55)
+            ax.set_title(f"{name}: toàn bộ vector HOG ({vector.size} chiều)")
+            ax.set_xlabel("Chỉ số chiều trong vector")
+            ax.set_ylabel("Giá trị")
+            ax.grid(alpha=0.2)
+        vector_fig.tight_layout()
+        st.pyplot(vector_fig, width='stretch')
+        plt.close(vector_fig)
+        vector_summary = [
+            {
+                "vector": "Baseline",
+                "feature_dim": int(baseline_vector.size),
+                "min": float(baseline_vector.min()),
+                "max": float(baseline_vector.max()),
+                "mean": float(baseline_vector.mean()),
+                "non_zero": int(np.count_nonzero(baseline_vector)),
+            }
+        ]
+        if tab4_vector is not None:
+            vector_summary.append(
+                {
+                    "vector": optimized_label,
+                    "feature_dim": int(tab4_vector.size),
+                    "min": float(tab4_vector.min()),
+                    "max": float(tab4_vector.max()),
+                    "mean": float(tab4_vector.mean()),
+                    "non_zero": int(np.count_nonzero(tab4_vector)),
+                }
+            )
+        st.dataframe(format_float_df(pd.DataFrame(vector_summary)), width='stretch', hide_index=True)
+        st.caption("Biểu đồ trên vẽ toàn bộ phần tử của vector HOG theo thứ tự đưa vào SVM; không cắt 200-300 chiều đầu.")
+
         st.markdown("**Histogram hướng gradient trong một cell**")
         hist_control_1, hist_control_2, hist_control_3 = st.columns(3)
         ppc_label = hist_control_1.selectbox("pixels_per_cell", ["2x2", "4x4", "8x8", "12x12", "16x16"], index=2, key="tab3_pixels_per_cell")
         selected_pixels_per_cell = tuple(int(x) for x in ppc_label.split("x"))
         cell_w, cell_h = selected_pixels_per_cell
-        n_cells_x = max(1, base_pre.shape[1] // cell_w)
-        n_cells_y = max(1, base_pre.shape[0] // cell_h)
+        n_cells_x = max(1, min(base_pre.shape[1] // cell_w, tab4_pre.shape[1] // cell_w))
+        n_cells_y = max(1, min(base_pre.shape[0] // cell_h, tab4_pre.shape[0] // cell_h))
         max_cell_x = max(0, n_cells_x - 1)
         max_cell_y = max(0, n_cells_y - 1)
         cell_x = hist_control_2.slider("cell_x", 0, max_cell_x, min(3, max_cell_x))
@@ -688,7 +838,7 @@ feature_dim = n_blocks_x * n_blocks_y * cells_per_block_x * cells_per_block_y * 
             baseline_config["cells_per_block"],
         )
         base_centers, base_hist = cell_histogram(base_pre, cell_x, cell_y, selected_pixels_per_cell, baseline_orientation)
-        opt_centers, opt_hist = cell_histogram(base_pre, cell_x, cell_y, selected_pixels_per_cell, optimized_orientation)
+        opt_centers, opt_hist = cell_histogram(tab4_pre, cell_x, cell_y, selected_pixels_per_cell, optimized_orientation)
 
         hist_fig, hist_axes = plt.subplots(1, 2, figsize=(9, 3.2), sharey=True)
         hist_axes[0].bar(base_centers, base_hist, width=180 / baseline_orientation * 0.85, color="#4c78a8")
@@ -714,6 +864,7 @@ feature_dim = n_blocks_x * n_blocks_y * cells_per_block_x * cells_per_block_y * 
             )
         with hist_col:
             st.pyplot(hist_fig, width='stretch')
+            plt.close(hist_fig)
         if optimized_orientation == baseline_orientation:
             hist_note = (
                 f"Baseline và {optimized_label} đều chia hướng gradient thành {baseline_orientation} bins. "
@@ -872,6 +1023,7 @@ with tab6:
                     ax.text(x_idx, y_idx, int(cm[y_idx, x_idx]), ha="center", va="center", fontsize=9)
         cm_fig.tight_layout()
         st.pyplot(cm_fig, width='stretch')
+        plt.close(cm_fig)
 
     def show_gallery(df: pd.DataFrame, title: str) -> None:
         st.markdown(f"**{title}**")
@@ -896,36 +1048,119 @@ with tab6:
     show_gallery(regressed_df, "Baseline đúng nhưng Optimized sai")
 
 with tab7:
-    st.subheader("Slide mode / Thuyết trình nhanh")
-    baseline_row = final_metrics[final_metrics["model"] == "Baseline HOG + SVM"].iloc[0]
-    optimized_row = final_metrics[final_metrics["model"] == "Optimized HOG + SVM"].iloc[0]
+    st.subheader("Case Study Pipeline")
+    st.info("Tab này gom toàn bộ pipeline của một ROI, từ ảnh gốc đến HOG vector và điểm quyết định của SVM.")
     tab4_config = tab4_config_from_state()
     tab4_is_exported_optimized = configs_equal(tab4_config, optimized_config)
-    tab4_eval_signature = st.session_state.get("tab4_eval_signature")
-    tab4_eval_macro_f1 = st.session_state.get("tab4_eval_macro_f1")
-    if tab4_is_exported_optimized:
-        slide_config_label = "Optimized đã export"
-        slide_macro_line = f"Macro F1 tăng từ {float(baseline_row['macro_f1']):.4f} lên {float(optimized_row['macro_f1']):.4f}."
-        slide_eval_line = "Trong notebook seed 126, optimized ưu tiên cấu hình có Macro F1 cao nhất trong sweep."
-    elif tab4_eval_signature == config_signature(tab4_config) and tab4_eval_macro_f1 is not None:
-        slide_config_label = "Cấu hình Tab 4 đã đánh giá"
-        slide_macro_line = f"Macro F1 baseline = {float(baseline_row['macro_f1']):.4f}; cấu hình Tab 4 = {float(tab4_eval_macro_f1):.4f}."
-        slide_eval_line = "Macro F1 của cấu hình Tab 4 lấy từ custom evaluation vừa chạy trong demo."
+    optimized_label = "Optimized đã export" if tab4_is_exported_optimized else "Cấu hình Tab 4"
+
+    case_mode_options = [
+        "Dùng ROI đang chọn",
+        "Baseline sai, Optimized đúng",
+        "Cả hai đúng",
+        "Cả hai sai",
+        "Random sample",
+    ]
+    case_mode = st.selectbox("Chế độ chọn ROI", case_mode_options)
+    fallback_row = selected_row(test_metadata)
+    if fallback_row is None and not test_metadata.empty:
+        fallback_row = test_metadata.iloc[0]
+    if case_mode == "Dùng ROI đang chọn":
+        case_row = fallback_row
+    elif case_mode == "Random sample":
+        case_row = pick_presentation_row(test_metadata, case_mode)
     else:
-        slide_config_label = "Cấu hình Tab 4 chưa đánh giá"
-        slide_macro_line = f"Macro F1 baseline = {float(baseline_row['macro_f1']):.4f}; cấu hình Tab 4 chưa có Macro F1."
-        slide_eval_line = "Muốn có Macro F1 cho cấu hình Tab 4 thì chạy custom evaluation ở Tab 4."
-    st.markdown(
-        f"""
-        1. Bài toán là classification trên ROI crop, không phải detection.
-        2. Baseline là HOG + SVM mặc định.
-        3. HOG biểu diễn cạnh bằng histogram hướng gradient.
-        4. Nhóm tối ưu/thử các tham số HOG để tìm cấu hình phù hợp hơn.
-        5. Baseline: image_size={pair_label(baseline_config['image_size'])}, orientations={baseline_config['orientations']}, feature_dim={compute_feature_dim(baseline_config)}.
-        6. {slide_config_label}: image_size={pair_label(tab4_config['image_size'])}, orientations={tab4_config['orientations']}, feature_dim={compute_feature_dim(tab4_config)}.
-        7. {slide_macro_line}
-        8. {slide_eval_line}
-        9. Robustness kiểm tra mô hình dưới brightness/contrast/blur/noise.
-        10. Failure analysis cho thấy optimized sửa được một số lỗi của baseline.
-        """
-    )
+        if case_mode == "Baseline sai, Optimized đúng":
+            candidates = test_metadata[(test_metadata["baseline_pred"] != test_metadata["true_label"]) & (test_metadata["optimized_pred"] == test_metadata["true_label"])]
+        elif case_mode == "Cả hai đúng":
+            candidates = test_metadata[(test_metadata["baseline_pred"] == test_metadata["true_label"]) & (test_metadata["optimized_pred"] == test_metadata["true_label"])]
+        else:
+            candidates = test_metadata[(test_metadata["baseline_pred"] != test_metadata["true_label"]) & (test_metadata["optimized_pred"] != test_metadata["true_label"])]
+        if candidates.empty:
+            st.warning("Không có mẫu phù hợp, dùng ROI đang chọn để fallback.")
+            case_row = fallback_row
+        else:
+            case_row = pick_presentation_row(test_metadata, case_mode)
+
+    if case_row is None:
+        st.warning("Không có metadata để hiển thị case study.")
+    else:
+        st.session_state["selected_roi_id"] = int(case_row["roi_id"])
+        true_label = str(case_row["true_label"])
+        full_image, roi = load_roi_from_row(case_row, data_root)
+        if full_image is None or roi is None:
+            st.warning("Không đọc được ảnh/ROI từ DATA_ROOT cho ví dụ đang chọn.")
+        else:
+            bbox = (case_row["xmin"], case_row["ymin"], case_row["xmax"], case_row["ymax"])
+            boxed = draw_bbox(full_image, bbox, true_label)
+            base_pred = predict_roi(baseline_model, roi, baseline_config)
+            opt_pred = predict_roi(optimized_model, roi, optimized_config)
+            opt_pre, opt_hog = compute_hog_visualization(roi, tab4_config)
+            _, _, magnitude, orientation_deg = compute_gradients(opt_pre)
+            magnitude_display = magnitude / (float(magnitude.max()) + 1e-8)
+            orientation_display = make_gradient_orientation_display(orientation_deg, magnitude)
+
+            st.markdown("**1. Case Study Pipeline**")
+            st.caption("HOG nhìn biển báo qua hình dạng cạnh, không phải qua màu sắc thô.")
+            pipe_cols_1 = st.columns(3)
+            pipe_cols_1[0].image(boxed, caption="1. Ảnh gốc + bounding box", width="stretch")
+            pipe_cols_1[1].image(roi, caption="2. ROI crop", width="stretch")
+            pipe_cols_1[2].image(opt_pre, caption=f"3. Preprocessing: {tab4_config['preprocessing']} ({optimized_label})", width="stretch", clamp=True)
+
+            pipe_cols_2 = st.columns(3)
+            pipe_cols_2[0].image(magnitude_display, caption="4. Gradient magnitude", width="stretch", clamp=True)
+            pipe_cols_2[1].image(orientation_display, caption="5. Gradient orientation", width="stretch")
+            pipe_cols_2[2].image(opt_hog, caption="6. HOG visualization", width="stretch", clamp=True)
+
+            pred_cols = st.columns(3)
+            pred_cols[0].metric("True label", true_label)
+            pred_cols[1].metric("Baseline prediction", base_pred, render_prediction_badge(true_label, base_pred))
+            pred_cols[2].metric("Optimized prediction", opt_pred, render_prediction_badge(true_label, opt_pred))
+            st.markdown(
+                '<div class="good-box">Ảnh được crop theo bounding box, sau đó chuyển về grayscale/CLAHE. '
+                'HOG không học trực tiếp từ màu sắc mà mô tả hướng cạnh cục bộ. '
+                'Các vùng có viền tròn, tam giác, mũi tên hoặc chữ số sẽ tạo histogram hướng đặc trưng. '
+                'SVM dùng vector HOG để quyết định nhóm biển báo.</div>',
+                unsafe_allow_html=True,
+            )
+
+            st.markdown("**2. Parameter Sweep Presets**")
+            st.info("Thay đổi tham số HOG làm ảnh HOG và feature_dim đổi ngay theo cấu hình Tab 4, nhưng phần này không train lại model.")
+            preset_name = st.selectbox("Preset cần so sánh", ["pixels_per_cell", "orientations", "image_size"])
+            preset_values = {
+                "pixels_per_cell": ["4x4", "8x8", "16x16"],
+                "orientations": [6, 9, 12],
+                "image_size": ["64x64", "96x96", "128x128"],
+            }[preset_name]
+            preset_cols = st.columns(3)
+            for col, value in zip(preset_cols, preset_values):
+                cfg = make_preset_config(tab4_config, preset_name, value)
+                dim = compute_feature_dim(cfg)
+                with col:
+                    st.markdown(f"**{preset_name} = {value}**")
+                    st.caption(f"feature_dim = {dim}")
+                    if dim > 0:
+                        _, preset_hog = compute_hog_visualization(roi, cfg)
+                        st.image(preset_hog, caption="HOG visualization", width="stretch", clamp=True)
+                    else:
+                        st.warning("Cấu hình không hợp lệ.")
+                    st.caption(preset_note(preset_name, value))
+
+            st.markdown("**3. SVM Decision Score**")
+            st.info("SVM tính điểm cho từng lớp; lớp có decision score cao nhất là dự đoán cuối cùng.")
+            score_cols = st.columns(2)
+            try:
+                baseline_scores, baseline_score_pred = svm_decision_scores(baseline_model, roi, baseline_config)
+                optimized_scores, optimized_score_pred = svm_decision_scores(optimized_model, roi, optimized_config)
+                with score_cols[0]:
+                    render_svm_score_chart(baseline_scores, "Baseline SVM scores", true_label)
+                    st.caption(f"Predicted label: {baseline_score_pred}")
+                with score_cols[1]:
+                    render_svm_score_chart(optimized_scores, "Optimized SVM scores", true_label)
+                    st.caption(f"Predicted label: {optimized_score_pred}")
+                st.markdown(
+                    "SVM tính điểm cho từng lớp. Lớp có điểm cao nhất là dự đoán cuối cùng. "
+                    "Khi optimized đúng còn baseline sai, ta có thể thấy vector HOG optimized làm lớp đúng có điểm cao hơn."
+                )
+            except Exception as exc:
+                st.warning(f"Không tính được decision score cho ví dụ này: {exc}")
