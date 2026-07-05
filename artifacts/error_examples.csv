@@ -1,0 +1,8 @@
+roi_id,source_index,filename,image_path,xmin,ymin,xmax,ymax,class_id,true_label,baseline_pred,optimized_pred,split,case_type
+312,312,00198.ppm,00198.ppm,678,412,702,435,14,other,other,mandatory,test,baseline_correct_optimized_wrong
+37,37,00025.ppm,00025.ppm,734,463,767,497,40,mandatory,other,mandatory,test,baseline_wrong_optimized_correct
+753,753,00479.ppm,00479.ppm,990,539,1020,569,40,mandatory,other,mandatory,test,baseline_wrong_optimized_correct
+999,999,00725.ppm,00725.ppm,552,599,573,621,39,mandatory,prohibitory,mandatory,test,baseline_wrong_optimized_correct
+255,255,00162.ppm,00162.ppm,244,430,262,448,17,other,mandatory,other,test,baseline_wrong_optimized_correct
+467,467,00295.ppm,00295.ppm,98,417,142,463,6,other,prohibitory,other,test,baseline_wrong_optimized_correct
+901,901,00641.ppm,00641.ppm,26,425,68,467,17,other,mandatory,other,test,baseline_wrong_optimized_correct

@@ -1,0 +1,48 @@
+{
+  "random_state": 126,
+  "labels": [
+    "prohibitory",
+    "danger",
+    "mandatory",
+    "other"
+  ],
+  "data_root": "data\\FullIJCNN2013",
+  "baseline": {
+    "image_size": [
+      64,
+      64
+    ],
+    "orientations": 9,
+    "pixels_per_cell": [
+      8,
+      8
+    ],
+    "cells_per_block": [
+      2,
+      2
+    ],
+    "block_norm": "L2-Hys",
+    "preprocessing": "gray_clahe"
+  },
+  "optimized": {
+    "image_size": [
+      96,
+      96
+    ],
+    "orientations": 9,
+    "pixels_per_cell": [
+      8,
+      8
+    ],
+    "cells_per_block": [
+      2,
+      2
+    ],
+    "block_norm": "L2-Hys",
+    "preprocessing": "gray_clahe"
+  },
+  "feature_dim": {
+    "baseline": 1764,
+    "optimized": 4356
+  }
+}

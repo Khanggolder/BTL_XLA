@@ -1,0 +1,3 @@
+model,role,image_size,orientations,pixels_per_cell,cells_per_block,block_norm,preprocessing,accuracy,macro_precision,macro_recall,macro_f1,feature_dim,delta_vs_baseline
+Baseline HOG + SVM,baseline chính,"(64, 64)",9,"(8, 8)","(2, 2)",L2-Hys,gray_clahe,0.9763513513513513,0.9696699905033238,0.9652741280458672,0.9674321568426478,1764,0.0
+Optimized HOG + SVM,cải tiến chính,"(96, 96)",9,"(8, 8)","(2, 2)",L2-Hys,gray_clahe,0.9932432432432432,0.989094746716698,0.9936395126612518,0.9913270717398444,4356,0.02389491489719653
