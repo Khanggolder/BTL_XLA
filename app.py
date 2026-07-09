@@ -19,6 +19,7 @@ from sklearn.svm import LinearSVC
 from hog_demo_utils import (
     DEFAULT_HOG_CONFIG,
     apply_condition_transform,
+    block_hog_vector,
     compute_feature_dim,
     compute_hog_visualization,
     cell_histogram,
@@ -221,6 +222,8 @@ def draw_hog_grid_overlay(
     cell_y: int,
     pixels_per_cell: tuple[int, int],
     cells_per_block: tuple[int, int],
+    block_x: int | None = None,
+    block_y: int | None = None,
 ) -> tuple[np.ndarray, tuple[int, int]]:
     cell_w, cell_h = pixels_per_cell
     block_w, block_h = cells_per_block
@@ -235,8 +238,12 @@ def draw_hog_grid_overlay(
 
     n_cells_x = max(1, width // cell_w)
     n_cells_y = max(1, height // cell_h)
-    block_x = min(max(0, int(cell_x)), max(0, n_cells_x - block_w))
-    block_y = min(max(0, int(cell_y)), max(0, n_cells_y - block_h))
+    if block_x is None:
+        block_x = cell_x
+    if block_y is None:
+        block_y = cell_y
+    block_x = min(max(0, int(block_x)), max(0, n_cells_x - block_w))
+    block_y = min(max(0, int(block_y)), max(0, n_cells_y - block_h))
 
     _draw_rect_rgb(
         out,
@@ -586,17 +593,6 @@ with tab1:
         "nếu đổi tham số thì `feature_dim` cập nhật ngay, còn `macro_f1` chỉ có sau khi chạy đánh giá."
     )
 
-    with st.expander("Gợi ý thuyết trình nhanh"):
-        st.markdown(
-            """
-            - Bài toán của nhóm là phân loại ROI biển báo giao thông thành 4 nhóm: prohibitory, danger, mandatory, other.
-            - Pipeline: ảnh gốc -> bounding box ROI -> preprocessing -> HOG descriptor -> StandardScaler -> Linear SVM.
-            - HOG mô tả hình dạng qua hướng cạnh, phù hợp với biển báo vì biển báo có viền, mũi tên, chữ số và ký hiệu rõ.
-            - Giả thuyết: cấu hình HOG optimized sẽ cho Macro F1 tốt hơn baseline vì giữ được nhiều chi tiết ký hiệu hơn.
-            - Tiêu chí đánh giá: accuracy, macro precision, macro recall, macro F1, confusion matrix và robustness.
-            """
-        )
-
 with tab2:
     st.subheader("Demo phân loại ROI")
     chosen = None
@@ -696,9 +692,19 @@ with tab3:
         visual_cols[2].image(magnitude_display, caption="Gradient magnitude", width='stretch', clamp=True)
 
         visual_cols_2 = st.columns(3)
-        visual_cols_2[0].image(orientation_display, caption="Gradient orientation 0-180\u00b0", width='stretch')
-        visual_cols_2[1].image(base_hog, caption=f"HOG baseline, orientations = {baseline_orientation}", width='stretch', clamp=True)
-        visual_cols_2[2].image(opt_hog, caption=f"HOG {optimized_label}, orientations = {optimized_orientation}", width='stretch', clamp=True)
+        visual_cols_2[0].image(orientation_display, caption="Gradient orientation 0-180°", width='stretch')
+        visual_cols_2[1].image(
+            base_hog,
+            caption=f"HOG baseline: image_size={baseline_config['image_size']}, {baseline_orientation} bins",
+            width='stretch',
+            clamp=True,
+        )
+        visual_cols_2[2].image(
+            opt_hog,
+            caption=f"HOG {optimized_label}: image_size={tab4_config['image_size']}, {optimized_orientation} bins",
+            width='stretch',
+            clamp=True,
+        )
 
         st.info(
             f"Phần HOG bên phải đang dùng {optimized_label}. "
@@ -709,7 +715,11 @@ with tab3:
         if optimized_dim == 0:
             st.warning("Cấu hình Tab 4 hiện không hợp lệ cho HOG: cell/block quá lớn so với image_size.")
         if optimized_orientation == baseline_orientation:
-            orientation_note = f"Baseline và {optimized_label} dùng cùng số orientation bins; khác biệt chính nằm ở các tham số HOG khác như image_size/preprocessing."
+            orientation_note = (
+                f"Baseline và {optimized_label} đều dùng {baseline_orientation} orientation bins. "
+                f"Khác biệt chính trong so sánh này là image_size: baseline {baseline_config['image_size']} "
+                f"còn {optimized_label} {tab4_config['image_size']}."
+            )
         elif optimized_orientation < baseline_orientation:
             orientation_note = f"{optimized_label} dùng ít orientation bins hơn nên hướng cạnh được gom thô hơn."
         else:
@@ -718,8 +728,8 @@ with tab3:
             f"""
             - HOG không nhìn màu chính, mà nhìn gradient/cạnh.
             - Mỗi cell gồm các gradient thành histogram hướng.
-            - Baseline {baseline_orientation} bins: mỗi bin khoảng {degrees_per_bin_baseline:.1f} độ.
-            - {optimized_label} {optimized_orientation} bins: mỗi bin khoảng {degrees_per_bin_optimized:.1f} độ.
+            - Cả hai cấu hình đang dùng {baseline_orientation} orientation bins, tức mỗi bin khoảng {degrees_per_bin_baseline:.1f} độ.
+            - Điểm khác biệt chính là kích thước ROI đưa vào HOG: baseline {baseline_config['image_size']} và {optimized_label} {tab4_config['image_size']}.
             - {orientation_note}
             - Nếu đổi tham số ở Tab 4, HOG visualization và feature_dim ở đây đổi theo cấu hình đó.
             """
@@ -819,64 +829,114 @@ feature_dim = n_blocks_x * n_blocks_y * cells_per_block_x * cells_per_block_y * 
         st.dataframe(format_float_df(pd.DataFrame(vector_summary)), width='stretch', hide_index=True)
         st.caption("Biểu đồ trên vẽ toàn bộ phần tử của vector HOG theo thứ tự đưa vào SVM; không cắt 200-300 chiều đầu.")
 
-        st.markdown("**Histogram hướng gradient trong một cell**")
-        hist_control_1, hist_control_2, hist_control_3 = st.columns(3)
+        st.markdown("**Histogram h\u01b0\u1edbng gradient trong cell v\u00e0 block HOG**")
+        hist_control_1, hist_control_2 = st.columns(2)
         ppc_label = hist_control_1.selectbox("pixels_per_cell", ["2x2", "4x4", "8x8", "12x12", "16x16"], index=2, key="tab3_pixels_per_cell")
         selected_pixels_per_cell = tuple(int(x) for x in ppc_label.split("x"))
         cell_w, cell_h = selected_pixels_per_cell
         n_cells_x = max(1, min(base_pre.shape[1] // cell_w, tab4_pre.shape[1] // cell_w))
         n_cells_y = max(1, min(base_pre.shape[0] // cell_h, tab4_pre.shape[0] // cell_h))
-        max_cell_x = max(0, n_cells_x - 1)
-        max_cell_y = max(0, n_cells_y - 1)
-        cell_x = hist_control_2.slider("cell_x", 0, max_cell_x, min(3, max_cell_x))
-        cell_y = hist_control_3.slider("cell_y", 0, max_cell_y, min(3, max_cell_y))
+        cpb_options = ["1x1", "2x2", "3x3", "4x4"]
+        valid_cpb_options = []
+        for option in cpb_options:
+            option_w, option_h = tuple(int(x) for x in option.split("x"))
+            if option_w <= n_cells_x and option_h <= n_cells_y:
+                valid_cpb_options.append(option)
+        default_cpb_index = valid_cpb_options.index("2x2") if "2x2" in valid_cpb_options else 0
+        if st.session_state.get("tab3_cells_per_block") not in valid_cpb_options:
+            st.session_state["tab3_cells_per_block"] = valid_cpb_options[default_cpb_index]
+        cpb_label = hist_control_2.selectbox("cells_per_block", valid_cpb_options, index=default_cpb_index, key="tab3_cells_per_block")
+        selected_cells_per_block = tuple(int(x) for x in cpb_label.split("x"))
+        block_w, block_h = selected_cells_per_block
+        max_block_x = max(0, n_cells_x - block_w)
+        max_block_y = max(0, n_cells_y - block_h)
+
+        block_control_1, block_control_2, block_control_3, block_control_4 = st.columns(4)
+        block_x = block_control_1.slider("block_x", 0, max_block_x, min(2, max_block_x))
+        block_y = block_control_2.slider("block_y", 0, max_block_y, min(2, max_block_y))
+        local_cell_x = block_control_3.slider("cell_x trong block", 0, max(0, block_w - 1), 0)
+        local_cell_y = block_control_4.slider("cell_y trong block", 0, max(0, block_h - 1), 0)
+        cell_x = block_x + local_cell_x
+        cell_y = block_y + local_cell_y
+
         selected_cell, selected_block = draw_hog_grid_overlay(
             base_pre,
             cell_x,
             cell_y,
             selected_pixels_per_cell,
-            baseline_config["cells_per_block"],
+            selected_cells_per_block,
+            block_x,
+            block_y,
         )
         base_centers, base_hist = cell_histogram(base_pre, cell_x, cell_y, selected_pixels_per_cell, baseline_orientation)
         opt_centers, opt_hist = cell_histogram(tab4_pre, cell_x, cell_y, selected_pixels_per_cell, optimized_orientation)
+        base_block_vector = block_hog_vector(
+            base_pre,
+            block_x,
+            block_y,
+            selected_pixels_per_cell,
+            selected_cells_per_block,
+            baseline_orientation,
+        )
+        opt_block_vector = block_hog_vector(
+            tab4_pre,
+            block_x,
+            block_y,
+            selected_pixels_per_cell,
+            selected_cells_per_block,
+            optimized_orientation,
+        )
 
         hist_fig, hist_axes = plt.subplots(1, 2, figsize=(9, 3.2), sharey=True)
         hist_axes[0].bar(base_centers, base_hist, width=180 / baseline_orientation * 0.85, color="#4c78a8")
-        hist_axes[0].set_title(f"Baseline: {baseline_orientation} bins")
-        hist_axes[0].set_xlabel("Hướng gradient (độ)")
-        hist_axes[0].set_ylabel("Tổng magnitude")
+        hist_axes[0].set_title(f"Baseline cell: {baseline_orientation} bins")
+        hist_axes[0].set_xlabel("H\u01b0\u1edbng gradient (\u0111\u1ed9)")
+        hist_axes[0].set_ylabel("T\u1ed5ng magnitude")
         hist_axes[0].set_xlim(0, 180)
         hist_axes[1].bar(opt_centers, opt_hist, width=180 / optimized_orientation * 0.85, color="#59a14f")
-        hist_axes[1].set_title(f"{optimized_label}: {optimized_orientation} bins")
-        hist_axes[1].set_xlabel("Hướng gradient (độ)")
+        hist_axes[1].set_title(f"{optimized_label} cell: {optimized_orientation} bins")
+        hist_axes[1].set_xlabel("H\u01b0\u1edbng gradient (\u0111\u1ed9)")
         hist_axes[1].set_xlim(0, 180)
         hist_fig.tight_layout()
+
+        block_fig, block_axes = plt.subplots(1, 2, figsize=(9, 3.2), sharey=True)
+        block_axes[0].bar(np.arange(base_block_vector.size), base_block_vector, color="#4c78a8")
+        block_axes[0].set_title(f"Baseline block vector ({base_block_vector.size} chi\u1ec1u)")
+        block_axes[0].set_xlabel("Index trong block")
+        block_axes[0].set_ylabel("Gi\u00e1 tr\u1ecb sau normalize")
+        block_axes[1].bar(np.arange(opt_block_vector.size), opt_block_vector, color="#59a14f")
+        block_axes[1].set_title(f"{optimized_label} block vector ({opt_block_vector.size} chi\u1ec1u)")
+        block_axes[1].set_xlabel("Index trong block")
+        block_fig.tight_layout()
 
         cell_col, hist_col = st.columns([0.85, 1.35])
         with cell_col:
             st.image(
                 selected_cell,
                 caption=(
-                    f"Lưới cell {cell_w}x{cell_h}; cam=cell ({cell_x}, {cell_y}), "
-                    f"xanh=block {baseline_config['cells_per_block']} tại {selected_block}"
+                    f"L\u01b0\u1edbi cell {cell_w}x{cell_h}; xanh=block {selected_cells_per_block} "
+                    f"t\u1ea1i {selected_block}; cam=cell ({cell_x}, {cell_y}) trong block"
                 ),
                 width='stretch',
             )
         with hist_col:
             st.pyplot(hist_fig, width='stretch')
             plt.close(hist_fig)
+            st.pyplot(block_fig, width='stretch')
+            plt.close(block_fig)
         if optimized_orientation == baseline_orientation:
             hist_note = (
-                f"Baseline và {optimized_label} đều chia hướng gradient thành {baseline_orientation} bins. "
-                "Histogram orientation giống về số bin; khi đổi pixels_per_cell thì vùng lấy histogram lớn/nhỏ khác nhau."
+                f"Baseline v\u00e0 {optimized_label} \u0111\u1ec1u chia h\u01b0\u1edbng gradient th\u00e0nh {baseline_orientation} bins. "
+                "Histogram cell l\u00e0 th\u00f4ng tin th\u00f4 theo m\u1ed9t cell; block vector l\u00e0 c\u00e1c histogram cell trong block sau khi normalize."
             )
         else:
             hist_note = (
-                f"Baseline dùng {baseline_orientation} bins, {optimized_label} dùng {optimized_orientation} bins. "
-                "Số bins khác nhau làm histogram hướng gradient mịn hơn hoặc thô hơn."
+                f"Baseline d\u00f9ng {baseline_orientation} bins, {optimized_label} d\u00f9ng {optimized_orientation} bins. "
+                "S\u1ed1 bins kh\u00e1c nhau l\u00e0m histogram cell v\u00e0 vector block m\u1ecbn h\u01a1n ho\u1eb7c th\u00f4 h\u01a1n."
             )
         st.markdown(
-            hist_note + " Với biển báo giao thông, các đặc trưng quan trọng thường là viền tròn, tam giác, mũi tên và ký hiệu lớn."
+            hist_note
+            + " Block kh\u00f4ng thay th\u1ebf cell; block gom nhi\u1ec1u cell l\u00e2n c\u1eadn \u0111\u1ec3 chu\u1ea9n h\u00f3a, gi\u00fap HOG b\u1ec1n h\u01a1n khi \u0111\u1ed9 s\u00e1ng/t\u01b0\u01a1ng ph\u1ea3n thay \u0111\u1ed5i."
         )
 
 with tab4:

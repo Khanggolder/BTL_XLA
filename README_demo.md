@@ -93,7 +93,7 @@ Chọn ROI từ test set và xem dự đoán của baseline/optimized model đã
 
 ### 3. Trực quan HOG
 
-Hiển thị ROI, preprocessing, gradient magnitude/orientation, HOG baseline, HOG theo cấu hình Tab 4 và toàn bộ vector HOG đưa vào SVM. Phần histogram cho phép đổi `pixels_per_cell`; histogram optimized dùng preprocessing theo cấu hình Tab 4.
+Hiển thị ROI, ảnh sau `gray_clahe`, gradient magnitude/orientation, HOG baseline, HOG theo cấu hình Tab 4 và toàn bộ vector HOG đưa vào SVM. Phần histogram cho phép đổi `pixels_per_cell`; preprocessing luôn cố định là `gray_clahe`.
 
 ### 4. Thử tham số
 
@@ -103,7 +103,6 @@ Thử cấu hình HOG tương tác:
 - `orientations`: slider `1..18`
 - `pixels_per_cell`: `2x2`, `4x4`, `8x8`, `12x12`, `16x16`
 - `cells_per_block`: `1x1`, `2x2`, `3x3`, `4x4`
-- `preprocessing`: các kiểu tiền xử lý đang hỗ trợ
 
 Bấm `Cập nhật visualization và bảng Tab 1` để cập nhật ảnh HOG, feature_dim và bảng Tab 1.
 

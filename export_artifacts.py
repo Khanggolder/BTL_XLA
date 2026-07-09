@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import json
@@ -109,17 +109,20 @@ def infer_optimized_config(notebook_path: Path) -> dict[str, Any]:
             config["orientations"] = int(strict_match.group(3))
             config["pixels_per_cell"] = (int(strict_match.group(4)), int(strict_match.group(5)))
             config["cells_per_block"] = (int(strict_match.group(6)), int(strict_match.group(7)))
-            config["preprocessing"] = strict_match.group(8)
+            config["preprocessing"] = "gray_clahe"
             return config
         match = re.search(r"orientations t?t nh?t l?\s+(\d+)", text)
         if match:
             config["orientations"] = int(match.group(1))
             return config
-        print("Khong infer duoc optimized config tu notebook, fallback image_size=(96, 96), orientations=9.")
+        print("Không infer được optimized config từ notebook, fallback image_size=(96, 96), orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2).")
     else:
-        print("Khong tim thay notebook de infer optimized config, fallback image_size=(96, 96), orientations=9.")
+        print("Không tìm thấy notebook để infer optimized config, fallback image_size=(96, 96), orientations=9, pixels_per_cell=(8, 8), cells_per_block=(2, 2).")
     config["image_size"] = (96, 96)
     config["orientations"] = 9
+    config["pixels_per_cell"] = (8, 8)
+    config["cells_per_block"] = (2, 2)
+    config["preprocessing"] = "gray_clahe"
     return config
 
 def load_roi_records(df: pd.DataFrame, data_root: Path) -> tuple[list[np.ndarray], pd.DataFrame]:
@@ -359,7 +362,7 @@ def main() -> None:
     for path in sorted(artifact_dir.iterdir()):
         print(f"- {path}")
     print("\nKết quả chính:")
-    print(final_metrics[["model", "macro_f1", "feature_dim", "orientations", "preprocessing"]].to_string(index=False))
+    print(final_metrics[["model", "macro_f1", "feature_dim", "orientations", "pixels_per_cell", "cells_per_block", "preprocessing"]].to_string(index=False))
 
 
 if __name__ == "__main__":

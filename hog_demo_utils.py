@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
@@ -88,22 +88,28 @@ def preprocess_for_hog(
 ) -> np.ndarray:
     image_size = normalize_tuple(image_size)
     resized = cv2.resize(image_rgb, image_size, interpolation=cv2.INTER_AREA)
+
     if preprocessing == "gray":
         return cv2.cvtColor(resized, cv2.COLOR_RGB2GRAY)
+
     if preprocessing == "gray_clahe":
         gray = cv2.cvtColor(resized, cv2.COLOR_RGB2GRAY)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         return clahe.apply(gray)
+
     if preprocessing == "gray_clahe_blur":
         gray = cv2.cvtColor(resized, cv2.COLOR_RGB2GRAY)
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         enhanced = clahe.apply(gray)
         return cv2.GaussianBlur(enhanced, (3, 3), 0)
+
     if preprocessing == "yuv_y":
         return cv2.cvtColor(resized, cv2.COLOR_RGB2YUV)[:, :, 0]
+
     if preprocessing == "hsv_v":
         return cv2.cvtColor(resized, cv2.COLOR_RGB2HSV)[:, :, 2]
-    raise ValueError(f"Không hỗ trợ preprocessing: {preprocessing}")
+
+    raise ValueError(f"Unsupported preprocessing mode: {preprocessing}")
 
 
 def extract_hog_feature(image_rgb: np.ndarray, config: dict[str, Any]) -> np.ndarray:
@@ -193,6 +199,34 @@ def cell_histogram(
     hist, _ = np.histogram(cell_orientation, bins=edges, weights=cell_magnitude)
     centers = (edges[:-1] + edges[1:]) / 2.0
     return centers, hist.astype(np.float32)
+
+
+def block_hog_vector(
+    preprocessed_gray: np.ndarray,
+    block_x: int,
+    block_y: int,
+    pixels_per_cell: tuple[int, int],
+    cells_per_block: tuple[int, int],
+    orientations: int,
+    block_norm: str = "L2-Hys",
+) -> np.ndarray:
+    hog_blocks = hog(
+        preprocessed_gray,
+        orientations=int(orientations),
+        pixels_per_cell=normalize_tuple(pixels_per_cell),
+        cells_per_block=normalize_tuple(cells_per_block),
+        block_norm=block_norm,
+        visualize=False,
+        feature_vector=False,
+    )
+    if hog_blocks.size == 0:
+        return np.array([], dtype=np.float32)
+
+    max_y = max(0, hog_blocks.shape[0] - 1)
+    max_x = max(0, hog_blocks.shape[1] - 1)
+    y = min(max(0, int(block_y)), max_y)
+    x = min(max(0, int(block_x)), max_x)
+    return hog_blocks[y, x].ravel().astype(np.float32)
 
 
 def draw_cell_on_preprocessed(
