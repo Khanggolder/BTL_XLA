@@ -842,10 +842,12 @@ feature_dim = n_blocks_x * n_blocks_y * cells_per_block_x * cells_per_block_y * 
             option_w, option_h = tuple(int(x) for x in option.split("x"))
             if option_w <= n_cells_x and option_h <= n_cells_y:
                 valid_cpb_options.append(option)
-        default_cpb_index = valid_cpb_options.index("2x2") if "2x2" in valid_cpb_options else 0
-        if st.session_state.get("tab3_cells_per_block") not in valid_cpb_options:
-            st.session_state["tab3_cells_per_block"] = valid_cpb_options[default_cpb_index]
-        cpb_label = hist_control_2.selectbox("cells_per_block", valid_cpb_options, index=default_cpb_index, key="tab3_cells_per_block")
+        default_cpb = st.session_state.get("tab3_cells_per_block", "2x2")
+        if default_cpb not in valid_cpb_options:
+            default_cpb = "2x2" if "2x2" in valid_cpb_options else valid_cpb_options[0]
+        default_cpb_index = valid_cpb_options.index(default_cpb)
+        cpb_label = hist_control_2.selectbox("cells_per_block", valid_cpb_options, index=default_cpb_index)
+        st.session_state["tab3_cells_per_block"] = cpb_label
         selected_cells_per_block = tuple(int(x) for x in cpb_label.split("x"))
         block_w, block_h = selected_cells_per_block
         max_block_x = max(0, n_cells_x - block_w)
