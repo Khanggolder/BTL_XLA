@@ -6,6 +6,8 @@ Demo tập trung vào giả thuyết: tối ưu cấu hình HOG có thể cải 
 
 ## 1. Cấu trúc dữ liệu mẫu
 
+Link dataset: https://sid.erda.dk/public/archives/ff17dc924eba88d5d01a807357d6614c/published-archive.html
+
 Dữ liệu mẫu đặt tại:
 
 ```text
