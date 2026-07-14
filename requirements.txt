@@ -1,10 +1,21 @@
+# Streamlit demo
 streamlit
+
+# Data processing and visualization
 numpy
 pandas
+matplotlib
+pillow
 opencv-python
 scikit-image
 scikit-learn
-matplotlib
 joblib
-pillow
 tqdm
+
+# Notebook execution
+notebook
+ipykernel
+ipywidgets
+
+# Learnable HOG appendix in traffic_sign_cv.ipynb
+torch

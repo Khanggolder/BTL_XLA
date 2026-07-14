@@ -68,20 +68,3 @@ Sau đó chạy lại app:
 ```powershell
 streamlit run app.py
 ```
-
-## 5. Các file chính
-
-```text
-app.py                  Streamlit demo
-hog_demo_utils.py       Hàm xử lý ảnh, HOG, prediction, visualization
-export_artifacts.py     Export model, metadata, metrics từ notebook/dataset
-traffic_sign_cv.ipynb   Notebook huấn luyện và phân tích
-artifacts/              Model và kết quả đã export
-data/FullIJCNN2013/     Dữ liệu mẫu GTSDB
-```
-
-## 6. Ghi chú
-
-- App load model đã export, không train lại khi mở demo.
-- Tab 4 chỉ train SVM tạm thời khi bấm `Run custom config evaluation`.
-- Nếu đổi `DATA_ROOT` trong sidebar, hãy trỏ tới thư mục có `gt.txt` và ảnh `.ppm`.

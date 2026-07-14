@@ -4,23 +4,6 @@
 
 Demo tập trung vào giả thuyết: tối ưu cấu hình HOG có thể cải thiện Macro F1 so với baseline HOG + SVM.
 
-## Phạm vi demo
-
-Demo làm:
-
-- crop ROI biển báo từ ground-truth bbox trong `gt.txt`;
-- trích xuất HOG từ ROI sau preprocessing;
-- phân loại ROI vào 4 nhóm: `prohibitory`, `danger`, `mandatory`, `other`;
-- so sánh baseline HOG + SVM với cấu hình HOG tối ưu/export hoặc cấu hình đang thử ở Tab 4.
-
-Demo không làm:
-
-- detection bounding box;
-- candidate proposal;
-- CNN/YOLO;
-- upload ROI ngoài dataset;
-- voting hoặc Color + HOG.
-
 ## Cài đặt nhanh
 
 ```powershell
@@ -75,52 +58,6 @@ artifacts/
 ```
 
 Nếu app báo thiếu file trong danh sách này, hãy chạy lại `export_artifacts.py`.
-
-## Ý nghĩa các tab
-
-### 1. Tổng quan
-
-Tóm tắt input, output, pipeline xử lý và giả thuyết chính. Bảng tham số có 2 dòng:
-
-- Baseline giữ nguyên theo cấu hình export.
-- Optimized lấy theo cấu hình đang chọn ở Tab 4.
-
-Nếu cấu hình Tab 4 chưa được evaluation, `macro_f1` sẽ hiện `chưa đánh giá`.
-
-### 2. Phân loại ROI
-
-Chọn ROI từ test set và xem dự đoán của baseline/optimized model đã export. Selectbox `Chọn ví dụ thuyết trình` hỗ trợ chọn nhanh các nhóm case như baseline sai nhưng optimized đúng, cả hai đúng, cả hai sai hoặc tất cả mẫu.
-
-### 3. Trực quan HOG
-
-Hiển thị ROI, ảnh sau `gray_clahe`, gradient magnitude/orientation, HOG baseline, HOG theo cấu hình Tab 4 và toàn bộ vector HOG đưa vào SVM. Phần histogram cho phép đổi `pixels_per_cell`; preprocessing luôn cố định là `gray_clahe`.
-
-### 4. Thử tham số
-
-Thử cấu hình HOG tương tác:
-
-- `image_size`: `32x32`, `48x48`, `64x64`, `80x80`, `96x96`, `128x128`
-- `orientations`: slider `1..18`
-- `pixels_per_cell`: `2x2`, `4x4`, `8x8`, `12x12`, `16x16`
-- `cells_per_block`: `1x1`, `2x2`, `3x3`, `4x4`
-
-Bấm `Cập nhật visualization và bảng Tab 1` để cập nhật ảnh HOG, feature_dim và bảng Tab 1.
-
-Bấm `Run custom config evaluation` khi muốn train/evaluate tạm cấu hình đang chọn. Nên dùng `sample_size=50` hoặc `100` khi demo nhanh.
-
-### 5. Robustness
-
-Kiểm tra dự đoán trên ROI bị biến đổi sáng/tối, blur, noise. Nút `Demo nhanh` trong sidebar chỉ chọn sẵn ít điều kiện hơn để phần này gọn khi thuyết trình.
-
-### 6. Lỗi sai
-
-Xem per-class F1, confusion matrix và ví dụ lỗi sai/sửa lỗi. Phần này dùng metadata đã export, không đổi theo Tab 4.
-
-### 7. Case Study Pipeline
-
-Gom một ví dụ ROI vào một màn hình thuyết trình: ảnh gốc có bbox, ROI crop, preprocessing, gradient magnitude/orientation, HOG visualization, dự đoán baseline/optimized, parameter sweep presets và decision score của SVM.
-
-Phần visualization và parameter sweep dùng cấu hình Tab 4. Phần prediction và SVM decision score vẫn dùng model/config optimized đã export để tránh sai kích thước vector khi cấu hình Tab 4 khác model đã train.
 
 ## Lỗi thường gặp
 
